@@ -1,6 +1,6 @@
 # Demo video script (target 90 s)
 
-`demo/one-take-vfx-demo.mp4` is a silent cut with on-screen captions and the same structure as this script. Record the voiceover over it, or read it live over a screen recording. Times are cues, not limits.
+`demo/one-take-vfx-demo.mp4` has an AI narration (a text-to-speech voice, used only for the video; the app and pipeline use open weights only). `demo/one-take-vfx-demo-nov.mp4` is the silent cut with on-screen captions. The narration text below matches what is spoken; read it live over the silent cut if you prefer your own voice. Times are cues, not limits.
 
 **0:00 Title (5 s).** "One-take VFX: upload a phone clip, pick an effect. Open weights, running in ComfyUI."
 

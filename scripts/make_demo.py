@@ -70,14 +70,14 @@ with tempfile.TemporaryDirectory() as tmp:
     parts.append(tmp / "how.mp4")
     for name, image, cap in [("g1", "docs/graph-left.png", "The ComfyUI workflow: inputs, control and first-frame anchor"),
                              ("g2", "docs/graph-right.png", "LTX 2.5 sampler, guider and decode")]:
-        slide(tmp / f"{name}.mp4", ROOT / image, 6, cap)
+        slide(tmp / f"{name}.mp4", ROOT / image, 9, cap)
         parts.append(tmp / f"{name}.mp4")
     card(tmp / "outro.mp4", 6, [("Open source. MIT. Runs on one GPU.", 48, "250", "white"), ("Presets are JSON: add one file, get a new effect", 32, "340", "0x8b8b9a"),
                                 ("github.com/Kainotomic/one-take-vfx", 36, "430", "0xff6a3d")])
     parts.append(tmp / "outro.mp4")
     lst = tmp / "list.txt"
     lst.write_text("".join(f"file '{p}'\n" for p in parts))
-    out = ROOT / "demo/one-take-vfx-demo.mp4"
+    out = ROOT / "demo/one-take-vfx-demo-nov.mp4"
     ff("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out))
     print("wrote", out)
     # Social clip (about 12 s): the three strongest effects back to back
