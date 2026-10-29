@@ -1,0 +1,10 @@
+{
+  "id": "disintegrate",
+  "name": "Disintegrate",
+  "prompt": "The person's whole body disintegrates into glowing ash and drifting dust particles, starting at the fingertips and shoulders, large pieces of the body crumbling away and blowing off in the wind, only half of the body remaining, dramatic Marvel-style snap effect, cinematic VFX shot, the person stays in the same place and the camera, lighting and background match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.5,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}

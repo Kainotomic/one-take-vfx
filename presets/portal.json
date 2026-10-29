@@ -1,0 +1,10 @@
+{
+  "id": "portal",
+  "name": "Portal",
+  "prompt": "A huge swirling blue-orange energy portal tears open right behind the person, glowing ring edges crackling with lightning and sparks, bright light spilling onto them and the surroundings, wind whipping their hair and clothes, cinematic VFX shot, the person stays in the same place and the camera, lighting and background match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.6,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}

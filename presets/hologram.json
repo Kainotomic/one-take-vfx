@@ -1,0 +1,10 @@
+{
+  "id": "hologram",
+  "name": "Hologram",
+  "prompt": "The person turns into a glowing translucent cyan hologram with scanlines, flickering wireframe edges and glitchy data particles, a bright holographic glow reflecting on the surroundings, cinematic VFX shot, the person stays in the same place and the camera, lighting and background match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.5,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}

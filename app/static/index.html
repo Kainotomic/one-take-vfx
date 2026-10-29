@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One-take VFX</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0b0e; --panel:#15151b; --line:#2a2a35; --fg:#ececf1; --mut:#8b8b9a; --acc:#ff6a3d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:40px 20px 80px; }
+  h1 { margin:0 0 4px; font-size:28px; letter-spacing:-.02em; }
+  p.sub { margin:0 0 28px; color:var(--mut); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:720px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h2 { margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); font-weight:600; }
+  video { width:100%; border-radius:8px; background:#000; aspect-ratio:16/9; }
+  input[type=file] { width:100%; margin-bottom:12px; color:var(--mut); }
+  .presets { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; margin:12px 0; }
+  .presets button { background:#0f0f14; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px; cursor:pointer; font:inherit; }
+  .presets button.on { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset; }
+  #desc { min-height:3em; color:var(--mut); font-size:13px; }
+  #go { width:100%; margin-top:12px; padding:12px; border:0; border-radius:8px; background:var(--acc); color:#000; font-weight:700; font-size:15px; cursor:pointer; }
+  #go:disabled { opacity:.4; cursor:not-allowed; }
+  .bar { height:6px; background:var(--line); border-radius:3px; margin-top:12px; overflow:hidden; }
+  .bar > i { display:block; height:100%; width:0; background:var(--acc); transition:width .3s; }
+  #status { margin-top:8px; color:var(--mut); font-size:13px; min-height:1.4em; }
+  #dl { display:none; margin-top:12px; color:var(--acc); }
+</style>
+</head>
+<body>
+<main>
+  <h1>One-take VFX</h1>
+  <p class="sub">Upload a short clip, pick an effect, and LTX 2.5 renders it on your ComfyUI server.</p>
+  <div class="grid">
+    <section class="card">
+      <h2>Your clip</h2>
+      <input id="file" type="file" accept="video/*">
+      <video id="src" controls muted loop playsinline></video>
+      <div class="presets" id="presets"></div>
+      <div id="desc"></div>
+      <button id="go" disabled>Render effect</button>
+      <div class="bar"><i id="bar"></i></div>
+      <div id="status"></div>
+    </section>
+    <section class="card">
+      <h2>Result</h2>
+      <video id="out" controls loop playsinline></video>
+      <a id="dl" download>Download MP4</a>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let presets = [], chosen = null;
+
+fetch('/api/presets').then(r => r.json()).then(list => {
+  presets = list;
+  for (const p of list) {
+    const b = document.createElement('button');
+    b.textContent = p.name;
+    b.onclick = () => { chosen = p; [...$('presets').children].forEach(c => c.classList.toggle('on', c === b)); $('desc').textContent = p.prompt; refresh(); };
+    $('presets').append(b);
+  }
+});
+
+function refresh() { $('go').disabled = !($('file').files[0] && chosen); }
+$('file').onchange = () => { const f = $('file').files[0]; if (f) { $('src').src = URL.createObjectURL(f); $('src').play(); } refresh(); };
+
+$('go').onclick = async () => {
+  $('go').disabled = true; $('dl').style.display = 'none'; $('bar').style.width = '0';
+  $('status').textContent = 'Uploading...';
+  const fd = new FormData();
+  fd.append('file', $('file').files[0]); fd.append('preset', chosen.id);
+  fd.append('width', $('src').videoWidth || 768); fd.append('height', $('src').videoHeight || 448);
+  const r = await fetch('/api/jobs', { method: 'POST', body: fd });
+  if (!r.ok) { $('status').textContent = 'Error: ' + (await r.text()); refresh(); return; }
+  const { job_id } = await r.json();
+  const es = new EventSource(`/api/jobs/${job_id}/events`);
+  es.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.state === 'queued') $('status').textContent = 'Queued...';
+    if (m.state === 'running') {
+      if (m.max) { $('bar').style.width = (100 * m.value / m.max) + '%'; $('status').textContent = `Sampling step ${m.value}/${m.max}`; }
+      else $('status').textContent = 'Running...';
+    }
+    if (m.state === 'error') { es.close(); $('status').textContent = 'Error: ' + m.error; refresh(); }
+    if (m.state === 'done') {
+      es.close(); $('bar').style.width = '100%'; $('status').textContent = 'Done';
+      $('out').src = `/api/jobs/${job_id}/video`; $('out').play();
+      $('dl').href = `/api/jobs/${job_id}/video?download=true`; $('dl').style.display = 'inline-block';
+      refresh();
+    }
+  };
+  es.onerror = () => { es.close(); if ($('status').textContent !== 'Done') $('status').textContent = 'Connection lost'; refresh(); };
+};
+</script>
+</body>
+</html>

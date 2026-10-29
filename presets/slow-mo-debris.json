@@ -1,0 +1,10 @@
+{
+  "id": "slow-mo-debris",
+  "name": "Slow-Mo Debris",
+  "prompt": "A massive explosion shatters the ground right next to the person, huge chunks of debris, rocks and glowing sparks fly past in extreme slow motion all around them, thick dust clouds billowing, shockwave pushing their clothes, cinematic VFX shot, the person stays in the same place and the camera, lighting and background match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.6,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}
