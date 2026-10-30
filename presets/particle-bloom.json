@@ -1,0 +1,11 @@
+{
+  "id": "particle-bloom",
+  "name": "Particle Bloom",
+  "prompt": "The person's body dissolves into thousands of drifting glowing golden fireflies and light particles that float away and swirl in the air, the figure shimmering and half made of glowing dots, soft bokeh, magical atmosphere, the person keeps their pose and motion, the camera and framing match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.4,
+  "anchor_strength": 1.0,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}

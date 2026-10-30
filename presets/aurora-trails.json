@@ -1,0 +1,11 @@
+{
+  "id": "aurora-trails",
+  "name": "Aurora Trails",
+  "prompt": "Dark night scene with a vivid aurora borealis sky, thick glowing ribbons of green, teal and violet light streaming from the person's arms and body following every movement, long luminous light trails in the air, magical long-exposure light painting, the person keeps their pose and motion, the camera and framing match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.7,
+  "anchor_strength": 0.0,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}

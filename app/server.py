@@ -78,6 +78,7 @@ def build_prompt(preset: dict, video_name: str, seed: int, size: tuple[int, int]
     wf["negative"]["inputs"]["text"] = preset["negative_prompt"]
     wf["conditioning"]["inputs"]["frame_rate"] = float(fps)
     wf["guide"]["inputs"]["strength"] = preset["control_strength"]
+    wf["anchor"]["inputs"]["strength"] = preset.get("anchor_strength", 1.0)
     wf["ic_lora"]["inputs"]["strength_model"] = preset["control_strength"]
     wf["noise"]["inputs"]["noise_seed"] = seed
     wf["save"]["inputs"].update(frame_rate=float(fps), filename_prefix=f"onetake/{preset['id']}")

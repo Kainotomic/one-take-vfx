@@ -85,7 +85,7 @@ scripts/render_all.sh        # every preset on every clip in assets/clips -> dem
 
 ## Presets
 
-Presets are plain JSON files in [`presets/`](presets). Included: `disintegrate`, `levitate`, `set-on-fire`, `portal`, `time-freeze`, `slow-mo-debris`, `rain-stop`, `hologram`.
+Presets are plain JSON files in [`presets/`](presets). Included: `disintegrate`, `levitate`, `set-on-fire`, `portal`, `time-freeze`, `slow-mo-debris`, `rain-stop`, `hologram`, and four abstract looks: `neon-wireframe`, `aurora-trails`, `particle-bloom`, `liquid-chrome`.
 
 ```json
 {
@@ -94,6 +94,7 @@ Presets are plain JSON files in [`presets/`](presets). Included: `disintegrate`,
   "prompt": "Intense roaring flames engulf the person's whole body ...",
   "negative_prompt": "blurry, low quality, ...",
   "control_strength": 0.6,
+  "anchor_strength": 1.0,
   "num_frames": 97,
   "fps": 24,
   "lora": null
@@ -104,6 +105,7 @@ Presets are plain JSON files in [`presets/`](presets). Included: `disintegrate`,
 |---|---|
 | `prompt` / `negative_prompt` | Describe the effect and say the person and camera stay as in the footage. |
 | `control_strength` | 0 to 1. How firmly the input motion constrains the render. Lower lets the effect reshape the body; higher keeps it closer to the original. |
+| `anchor_strength` | 0 to 1, default 1. How strongly the clip's first frame is locked into the render. 1 keeps the scene as filmed; near 0 lets the effect restyle the whole scene (the abstract presets use 0 to 0.35). |
 | `num_frames` | Must be a multiple of 8, plus 1 (97 = 4 s at 24 fps). |
 | `fps` | Output frame rate. |
 | `lora` | Reserved for an optional extra open LoRA (name and link in the preset). None of the shipped presets uses one. |

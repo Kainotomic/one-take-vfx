@@ -1,0 +1,11 @@
+{
+  "id": "liquid-chrome",
+  "name": "Liquid Chrome",
+  "prompt": "The person turns into a polished silver liquid chrome statue, cool grey mirror metal like a T-1000, bright sky and city reflections rippling across the smooth reflective surface of the face, skin and clothes, no gold, no warm tint, cinematic, the person keeps their pose and motion, the camera and framing match the original footage",
+  "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
+  "control_strength": 0.7,
+  "anchor_strength": 0.15,
+  "num_frames": 97,
+  "fps": 24,
+  "lora": null
+}
