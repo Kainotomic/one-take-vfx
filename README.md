@@ -128,6 +128,7 @@ In [`workflows/`](workflows), each in ComfyUI **API** format (`*_api.json`) and 
 ## Known limits
 
 - Effects that must change the whole silhouette (fire, portal, debris) trade off against how closely the original motion is followed. Tune `control_strength` per preset.
+- `levitate` works on a person standing roughly in place (the control guide is moved upward over the clip). On a walking subject it does not lift, and on a wide shot with a small subject it can invent a new person.
 - Results vary by clip and seed. On a wide shot with a small subject (the fisherman clip) levitate and time-freeze can be weak or swap the person; the close, well-lit clips work best.
 - Faces can drift on long, strong effects. The first frame is locked; later frames are generated.
 - Clips are fitted to 768 px on the long side (portrait and landscape both work) and capped at 97 frames. One person in frame works best.

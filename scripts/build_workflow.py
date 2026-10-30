@@ -30,7 +30,8 @@ wf = {
     "fit": n("ImageScale", image=["load_video", 0], upscale_method="bilinear", width=W, height=H, crop="center"),
     "preprocess": n("LTXVPreprocess", image=["fit", 0], img_compression=18),
     "canny": n("Canny", image=["fit", 0], low_threshold=0.1, high_threshold=0.3),
-    "control_small": n("ImageScale", image=["canny", 0], upscale_method="bilinear", width=W // 2, height=H // 2, crop="disabled"),
+    "guide_motion": n("OneTakeGuideMotion", image=["canny", 0], dy=0.0, dx=0.0, ease_power=2.0, fade_below=0.0, region_x0=0.0, region_x1=1.0),
+    "control_small": n("ImageScale", image=["guide_motion", 0], upscale_method="bilinear", width=W // 2, height=H // 2, crop="disabled"),
     "positive": n("CLIPTextEncode", clip=["clip", 0], text=""),
     "negative": n("CLIPTextEncode", clip=["clip", 0], text=""),
     "conditioning": n("LTXVConditioning", positive=["positive", 0], negative=["negative", 0], frame_rate=24.0),
@@ -68,12 +69,14 @@ node["positive"]["inputs"]["text"] = ["preset", 0]
 node["negative"]["inputs"]["text"] = ["preset", 1]
 node["guide"]["inputs"]["strength"] = ["preset", 2]
 node["ic_lora"]["inputs"]["strength_model"] = ["preset", 2]
-node["load_video"]["inputs"]["frame_load_cap"] = ["preset", 3]
-node["load_video"]["inputs"]["force_rate"] = ["preset", 4]
-node["empty_latent"]["inputs"]["length"] = ["preset", 3]
-node["audio_latent"]["inputs"]["frames_number"] = ["preset", 3]
-node["audio_latent"]["inputs"]["frame_rate"] = ["preset", 4]
-node["conditioning"]["inputs"]["frame_rate"] = ["preset", 4]
-node["save"]["inputs"]["frame_rate"] = ["preset", 4]
+node["anchor"]["inputs"]["strength"] = ["preset", 3]
+node["load_video"]["inputs"]["frame_load_cap"] = ["preset", 4]
+node["load_video"]["inputs"]["force_rate"] = ["preset", 5]
+node["empty_latent"]["inputs"]["length"] = ["preset", 4]
+node["audio_latent"]["inputs"]["frames_number"] = ["preset", 4]
+node["audio_latent"]["inputs"]["frame_rate"] = ["preset", 5]
+node["conditioning"]["inputs"]["frame_rate"] = ["preset", 5]
+node["save"]["inputs"]["frame_rate"] = ["preset", 5]
+node["guide_motion"]["inputs"].update(dy=["preset", 6], dx=["preset", 7], fade_below=["preset", 8], region_x0=["preset", 9], region_x1=["preset", 10])
 (wf_dir / "one_take_vfx_preset_node_api.json").write_text(json.dumps(node, indent=2) + "\n")
 print("wrote workflows")

@@ -1,9 +1,18 @@
 {
   "id": "levitate",
   "name": "Levitate",
-  "prompt": "The person floats a full meter above the ground, clearly hovering in midair, feet clearly off the floor and dangling, hair and clothes drifting weightlessly, dust and debris rising in the air beneath them, glowing telekinetic energy swirling around the body, cinematic VFX shot, the person stays in the same place and the camera, lighting and background match the original footage",
+  "prompt": "The person floats a full meter above the ground, clearly hovering in midair with feet dangling well off the floor, a clear gap of empty air and a soft shadow on the floor beneath them, hair and clothes drifting weightlessly, dust and debris rising in the air, glowing telekinetic energy swirling around the body, the camera and background match the original footage",
   "negative_prompt": "blurry, low quality, distorted face, extra limbs, warped body, flickering, watermark, text, subtitles, cartoon, deformed hands",
-  "control_strength": 0.35,
+  "control_strength": 0.5,
+  "anchor_strength": 0.35,
+  "guide_motion": {
+    "dy": -0.24,
+    "fade_below": 0.0,
+    "region": [
+      0.3,
+      0.7
+    ]
+  },
   "num_frames": 97,
   "fps": 24,
   "lora": null

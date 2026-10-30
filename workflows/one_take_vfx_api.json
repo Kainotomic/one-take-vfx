@@ -111,11 +111,29 @@
       "title": "Canny"
     }
   },
+  "guide_motion": {
+    "class_type": "OneTakeGuideMotion",
+    "inputs": {
+      "image": [
+        "canny",
+        0
+      ],
+      "dy": 0.0,
+      "dx": 0.0,
+      "ease_power": 2.0,
+      "fade_below": 0.0,
+      "region_x0": 0.0,
+      "region_x1": 1.0
+    },
+    "_meta": {
+      "title": "Guide Motion"
+    }
+  },
   "control_small": {
     "class_type": "ImageScale",
     "inputs": {
       "image": [
-        "canny",
+        "guide_motion",
         0
       ],
       "upscale_method": "bilinear",
