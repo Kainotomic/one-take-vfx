@@ -5,12 +5,12 @@
 """One-take VFX web app: uploads a clip, fills a workflow with a preset, and relays progress from ComfyUI."""
 import asyncio
 import base64
+import ipaddress
 import copy
 import hmac
 import json
 import os
 import random
-import subprocess
 import tempfile
 import time
 import uuid
@@ -37,7 +37,9 @@ MAX_QUEUE = int(os.environ.get("MAX_QUEUE", "0"))
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "0"))  # 0 = no limit
 MAX_DURATION_S = float(os.environ.get("MAX_DURATION_S", "0"))  # 0 = no limit; needs ffprobe
 RATE_PER_HOUR = int(os.environ.get("RATE_PER_HOUR", "0"))  # per client IP, 0 = no limit
+TRUST_CF_HEADER = os.environ.get("TRUST_CF_HEADER") == "1"  # only behind Cloudflare: use CF-Connecting-IP as the client address
 renders_by_ip: dict[str, deque] = defaultdict(deque)
+probe_slots = asyncio.Semaphore(1)  # one ffprobe at a time
 jobs: dict[str, dict] = {}
 submit_lock = asyncio.Lock()
 
@@ -60,6 +62,12 @@ async def same_origin_only(request: Request, call_next):
     """Without a password, only answer to local host names (blocks DNS rebinding) and reject cross-site POSTs (CSRF)."""
     if not APP_PASSWORD and request.headers.get("host", "").rsplit(":", 1)[0].lower().strip() not in ALLOWED_HOSTS and request.headers.get("host", "").lower() not in ALLOWED_HOSTS:
         return JSONResponse({"detail": "host not allowed (set ALLOWED_HOSTS)"}, status_code=403)
+    if request.method == "POST" and MAX_UPLOAD_MB:
+        length = request.headers.get("content-length")
+        if length is None:
+            return JSONResponse({"detail": "Content-Length required"}, status_code=411)
+        if not length.isdigit() or int(length) > MAX_UPLOAD_MB * 1024 * 1024 + 65536:
+            return JSONResponse({"detail": f"Clip is larger than {MAX_UPLOAD_MB} MB"}, status_code=413)
     origin = request.headers.get("origin")
     if request.method == "POST" and origin and origin.split("://", 1)[-1] != request.headers.get("host"):
         return JSONResponse({"detail": "cross-origin request rejected"}, status_code=403)
@@ -104,9 +112,26 @@ def presets():
 
 
 def client_ip(request: Request) -> str:
-    """Behind the tunnel the peer is loopback and the real address is in CF-Connecting-IP; otherwise use the peer."""
+    """The peer address, or CF-Connecting-IP when TRUST_CF_HEADER=1 and the peer is the local tunnel; validated as an IP."""
     peer = request.client.host if request.client else "unknown"
-    return request.headers.get("cf-connecting-ip", peer) if peer in ("127.0.0.1", "::1") else peer
+    if TRUST_CF_HEADER and peer in ("127.0.0.1", "::1"):
+        try:
+            return str(ipaddress.ip_address(request.headers.get("cf-connecting-ip", "").strip()))
+        except ValueError:
+            return peer
+    return peer
+
+
+def rate_window(ip: str) -> deque:
+    """The client's recent render times, pruned; empty entries are dropped so the map stays bounded."""
+    now = time.time()
+    window = renders_by_ip[ip]
+    while window and now - window[0] > 3600:
+        window.popleft()
+    if len(renders_by_ip) > 10000:
+        for key in [k for k, v in renders_by_ip.items() if not v or now - v[-1] > 3600]:
+            del renders_by_ip[key]
+    return window
 
 
 def looks_like_video(head: bytes) -> bool:
@@ -114,11 +139,18 @@ def looks_like_video(head: bytes) -> bool:
     return head[4:8] == b"ftyp" or head[:4] == b"\x1a\x45\xdf\xa3"
 
 
-def duration_seconds(data: bytes) -> float:
-    with tempfile.NamedTemporaryFile(suffix=".bin") as f:
-        f.write(data); f.flush()
-        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f.name], capture_output=True, text=True, timeout=20)
-    return float(out.stdout.strip())
+async def duration_seconds(data: bytes) -> float:
+    async with probe_slots:
+        with tempfile.NamedTemporaryFile(suffix=".bin") as f:
+            f.write(data); f.flush()
+            proc = await asyncio.create_subprocess_exec("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f.name,
+                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            try:
+                out, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
+            except asyncio.TimeoutError:
+                proc.kill()
+                raise
+    return float(out.decode().strip())
 
 
 @app.post("/api/jobs")
@@ -131,21 +163,18 @@ async def create_job(request: Request, file: UploadFile = File(...), preset: str
         raise HTTPException(413, f"Clip is larger than {MAX_UPLOAD_MB} MB")
     if not looks_like_video(data[:16]):
         raise HTTPException(415, "Upload an MP4, MOV or WebM video")
+    ip = client_ip(request)
+    if RATE_PER_HOUR and len(rate_window(ip)) >= RATE_PER_HOUR:
+        raise HTTPException(429, f"Limit of {RATE_PER_HOUR} renders per hour reached")
     if MAX_DURATION_S:
         try:
-            length = duration_seconds(data)
+            length = await duration_seconds(data)
         except Exception:
             raise HTTPException(422, "Could not read the clip")
         if length > MAX_DURATION_S:
             raise HTTPException(422, f"Clip is {length:.1f} s long; the limit is {MAX_DURATION_S:g} s")
     if RATE_PER_HOUR:
-        ip, now = client_ip(request), time.time()
-        window = renders_by_ip[ip]
-        while window and now - window[0] > 3600:
-            window.popleft()
-        if len(window) >= RATE_PER_HOUR:
-            raise HTTPException(429, f"Limit of {RATE_PER_HOUR} renders per hour reached")
-        window.append(now)
+        rate_window(ip).append(time.time())
     name = f"onetake_{uuid.uuid4().hex}.mp4"
     client_id = uuid.uuid4().hex
     seed = random.randint(0, 2**32 - 1) if seed is None else seed
