@@ -41,11 +41,12 @@ def card(path, dur, lines):
     ff("-f", "lavfi", "-i", f"color=c=0x0b0b0e:s={W}x{H}:d={dur}", "-vf", vf, *common, str(path))
 
 
-def split(path, clip, out, caption):
-    src, res = ROOT / "assets/clips" / f"{clip}_clip.mp4", ROOT / "demo/outputs" / f"{clip}__{out}.mp4"
+def split(path, clip, out, caption, dur=4.05, label=None, src=None, res=None, ss=0.0):
+    src = src or ROOT / "assets/clips" / f"{clip}_clip.mp4"
+    res = res or ROOT / "demo/outputs" / f"{clip}__{out}.mp4"
     fc = (f"[0:v]scale=620:-2,setsar=1[a];[1:v]scale=620:-2,setsar=1[b];[a][b]hstack,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2+20:0x0b0b0e,"
-          + ",".join([text("BEFORE", 28, 150, "0x8b8b9a", "330"), text("AFTER", 28, 150, "0xff6a3d", "950"), text(caption, 54, 60)]))
-    ff("-i", str(src), "-i", str(res), "-filter_complex", fc, "-t", "4.05", *common, str(path))
+          + ",".join([text("BEFORE", 28, 150, "0x8b8b9a", "330"), text("AFTER", 28, 150, "0xff6a3d", "950"), text(caption, 54, 60)] + ([text(label, 22, "h-50", "0x8b8b9a")] if label else [])))
+    ff("-ss", f"{ss:.3f}", "-i", str(src), "-ss", f"{ss:.3f}", "-i", str(res), "-filter_complex", fc, "-t", f"{dur:.3f}", *common, str(path))
 
 
 def slide(path, image, dur, caption):
@@ -53,44 +54,49 @@ def slide(path, image, dur, caption):
     ff("-loop", "1", "-i", str(image), "-t", str(dur), "-vf", vf, *common, str(path))
 
 
-with tempfile.TemporaryDirectory() as tmp:
-    tmp = Path(tmp)
-    parts = []
-    card(tmp / "title.mp4", 6, [("One-take VFX", 96, "230", "white"), ("Upload a phone clip. Pick an effect.", 40, "380", "0xff6a3d"),
-                               ("LTX 2.5 + ComfyUI. 100% open weights.", 32, "450", "0x8b8b9a")])
-    parts.append(tmp / "title.mp4")
-    for i, (preset, clip, caption) in enumerate(SHOTS):
-        if not (ROOT / "demo/outputs" / f"{clip}__{preset}.mp4").exists():
-            continue
-        split(tmp / f"s{i}.mp4", clip, preset, caption)
-        parts.append(tmp / f"s{i}.mp4")
-    card(tmp / "how.mp4", 8, [("How it's built", 64, "150", "white"), ("Canny edges of your clip drive the motion (LTX IC-LoRA)", 32, "290", "white"),
-                              ("The first frame keeps the person and the room", 32, "350", "white"),
-                              ("The preset prompt adds the effect. LTX 2.5 renders it in 8 steps", 32, "410", "white")])
-    parts.append(tmp / "how.mp4")
-    for name, image, cap in [("g1", "docs/graph-left.png", "The ComfyUI workflow: inputs, control and first-frame anchor"),
-                             ("g2", "docs/graph-right.png", "LTX 2.5 sampler, guider and decode")]:
-        slide(tmp / f"{name}.mp4", ROOT / image, 9, cap)
-        parts.append(tmp / f"{name}.mp4")
-    card(tmp / "outro.mp4", 6, [("Open source. MIT. Runs on one GPU.", 48, "250", "white"), ("Presets are JSON: add one file, get a new effect", 32, "340", "0x8b8b9a"),
-                                ("github.com/Kainotomic/one-take-vfx", 36, "430", "0xff6a3d")])
-    parts.append(tmp / "outro.mp4")
-    lst = tmp / "list.txt"
-    lst.write_text("".join(f"file '{p}'\n" for p in parts))
-    out = ROOT / "demo/one-take-vfx-demo-nov.mp4"
-    ff("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out))
-    print("wrote", out)
-    # Social clip (about 12 s): the three strongest effects back to back
-    social = [tmp / f"s{i}.mp4" for i, (p, c, _) in enumerate(SHOTS) if p in ("set-on-fire", "portal", "disintegrate") and (tmp / f"s{i}.mp4").exists()]
-    if social:
-        sl = tmp / "slist.txt"
-        sl.write_text("".join(f"file '{p}'\n" for p in social))
-        ff("-f", "concat", "-safe", "0", "-i", str(sl), "-c", "copy", str(ROOT / "demo/social-clip.mp4"))
-        print("wrote demo/social-clip.mp4")
-    # README preview: three presets, before/after, small
-    previews = [tmp / f"s{i}.mp4" for i, (p, c, _) in enumerate(SHOTS) if p in ("disintegrate", "set-on-fire") and (tmp / f"s{i}.mp4").exists()]
-    if previews:
-        pl = tmp / "plist.txt"
-        pl.write_text("".join(f"file '{p}'\n" for p in previews))
-        ff("-f", "concat", "-safe", "0", "-i", str(pl), "-vf", "fps=10,scale=560:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse", str(ROOT / "docs/preview.gif"))
-        print("wrote docs/preview.gif")
+def main():
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        parts = []
+        card(tmp / "title.mp4", 6, [("One-take VFX", 96, "230", "white"), ("Upload a phone clip. Pick an effect.", 40, "380", "0xff6a3d"),
+                                   ("LTX 2.5 + ComfyUI. 100% open weights.", 32, "450", "0x8b8b9a")])
+        parts.append(tmp / "title.mp4")
+        for i, (preset, clip, caption) in enumerate(SHOTS):
+            if not (ROOT / "demo/outputs" / f"{clip}__{preset}.mp4").exists():
+                continue
+            split(tmp / f"s{i}.mp4", clip, preset, caption)
+            parts.append(tmp / f"s{i}.mp4")
+        card(tmp / "how.mp4", 8, [("How it's built", 64, "150", "white"), ("Canny edges of your clip drive the motion (LTX IC-LoRA)", 32, "290", "white"),
+                                  ("The first frame keeps the person and the room", 32, "350", "white"),
+                                  ("The preset prompt adds the effect. LTX 2.5 renders it in 8 steps", 32, "410", "white")])
+        parts.append(tmp / "how.mp4")
+        for name, image, cap in [("g1", "docs/graph-left.png", "The ComfyUI workflow: inputs, control and first-frame anchor"),
+                                 ("g2", "docs/graph-right.png", "LTX 2.5 sampler, guider and decode")]:
+            slide(tmp / f"{name}.mp4", ROOT / image, 9, cap)
+            parts.append(tmp / f"{name}.mp4")
+        card(tmp / "outro.mp4", 6, [("Open source. MIT. Runs on one GPU.", 48, "250", "white"), ("Presets are JSON: add one file, get a new effect", 32, "340", "0x8b8b9a"),
+                                    ("github.com/Kainotomic/one-take-vfx", 36, "430", "0xff6a3d")])
+        parts.append(tmp / "outro.mp4")
+        lst = tmp / "list.txt"
+        lst.write_text("".join(f"file '{p}'\n" for p in parts))
+        out = ROOT / "demo/one-take-vfx-demo-nov.mp4"
+        ff("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out))
+        print("wrote", out)
+        # Social clip (about 12 s): the three strongest effects back to back
+        social = [tmp / f"s{i}.mp4" for i, (p, c, _) in enumerate(SHOTS) if p in ("set-on-fire", "portal", "disintegrate") and (tmp / f"s{i}.mp4").exists()]
+        if social:
+            sl = tmp / "slist.txt"
+            sl.write_text("".join(f"file '{p}'\n" for p in social))
+            ff("-f", "concat", "-safe", "0", "-i", str(sl), "-c", "copy", str(ROOT / "demo/social-clip.mp4"))
+            print("wrote demo/social-clip.mp4")
+        # README preview: three presets, before/after, small
+        previews = [tmp / f"s{i}.mp4" for i, (p, c, _) in enumerate(SHOTS) if p in ("disintegrate", "set-on-fire") and (tmp / f"s{i}.mp4").exists()]
+        if previews:
+            pl = tmp / "plist.txt"
+            pl.write_text("".join(f"file '{p}'\n" for p in previews))
+            ff("-f", "concat", "-safe", "0", "-i", str(pl), "-vf", "fps=10,scale=560:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse", str(ROOT / "docs/preview.gif"))
+            print("wrote docs/preview.gif")
+
+
+if __name__ == "__main__":
+    main()
