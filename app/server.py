@@ -122,16 +122,27 @@ def client_ip(request: Request) -> str:
     return peer
 
 
-def rate_window(ip: str) -> deque:
-    """The client's recent render times, pruned; empty entries are dropped so the map stays bounded."""
+def reserve_slot(ip: str) -> float | None:
+    """Check and take a render slot for this client in one synchronous step (no await between check and append).
+    Returns the reservation stamp, or None when the client is over its hourly limit."""
     now = time.time()
-    window = renders_by_ip[ip]
+    if len(renders_by_ip) > 10000:  # bound the map; never evict the caller
+        for key in [k for k, v in renders_by_ip.items() if k != ip and (not v or now - v[-1] > 3600)]:
+            del renders_by_ip[key]
+    window = renders_by_ip.setdefault(ip, deque())
     while window and now - window[0] > 3600:
         window.popleft()
-    if len(renders_by_ip) > 10000:
-        for key in [k for k, v in renders_by_ip.items() if not v or now - v[-1] > 3600]:
-            del renders_by_ip[key]
-    return window
+    if len(window) >= RATE_PER_HOUR:
+        return None
+    window.append(now)
+    return now
+
+
+def release_slot(ip: str, stamp: float) -> None:
+    try:
+        renders_by_ip[ip].remove(stamp)
+    except (KeyError, ValueError):
+        pass
 
 
 def looks_like_video(head: bytes) -> bool:
@@ -147,9 +158,10 @@ async def duration_seconds(data: bytes) -> float:
                                                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
             try:
                 out, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
-            except asyncio.TimeoutError:
-                proc.kill()
-                raise
+            finally:
+                if proc.returncode is None:  # timeout or cancellation: reap before the slot is released
+                    proc.kill()
+                    await proc.wait()
     return float(out.decode().strip())
 
 
@@ -164,31 +176,35 @@ async def create_job(request: Request, file: UploadFile = File(...), preset: str
     if not looks_like_video(data[:16]):
         raise HTTPException(415, "Upload an MP4, MOV or WebM video")
     ip = client_ip(request)
-    if RATE_PER_HOUR and len(rate_window(ip)) >= RATE_PER_HOUR:
+    stamp = reserve_slot(ip) if RATE_PER_HOUR else None
+    if RATE_PER_HOUR and stamp is None:
         raise HTTPException(429, f"Limit of {RATE_PER_HOUR} renders per hour reached")
-    if MAX_DURATION_S:
-        try:
-            length = await duration_seconds(data)
-        except Exception:
-            raise HTTPException(422, "Could not read the clip")
-        if length > MAX_DURATION_S:
-            raise HTTPException(422, f"Clip is {length:.1f} s long; the limit is {MAX_DURATION_S:g} s")
-    if RATE_PER_HOUR:
-        rate_window(ip).append(time.time())
-    name = f"onetake_{uuid.uuid4().hex}.mp4"
-    client_id = uuid.uuid4().hex
-    seed = random.randint(0, 2**32 - 1) if seed is None else seed
-    async with submit_lock:  # the queue check and the submit must be atomic, or concurrent requests all pass the cap
-        if MAX_QUEUE:
-            q = (await client.get("/queue")).json()
-            if len(q["queue_running"]) + len(q["queue_pending"]) >= MAX_QUEUE:
-                raise HTTPException(429, "The GPU is busy, try again in a minute")
-        up = await client.post("/upload/image", files={"image": (name, data, file.content_type or "video/mp4")}, data={"overwrite": "true"})
-        up.raise_for_status()
-        r = await client.post("/prompt", json={"prompt": build_prompt(PRESETS[preset], up.json()["name"], seed, fit_size(width, height)), "client_id": client_id})
-        if r.status_code != 200:
-            raise HTTPException(502, f"ComfyUI rejected the workflow: {r.text[:800]}")
-        prompt_id = r.json()["prompt_id"]
+    try:
+        if MAX_DURATION_S:
+            try:
+                length = await duration_seconds(data)
+            except Exception:
+                raise HTTPException(422, "Could not read the clip")
+            if length > MAX_DURATION_S:
+                raise HTTPException(422, f"Clip is {length:.1f} s long; the limit is {MAX_DURATION_S:g} s")
+        name = f"onetake_{uuid.uuid4().hex}.mp4"
+        client_id = uuid.uuid4().hex
+        seed = random.randint(0, 2**32 - 1) if seed is None else seed
+        async with submit_lock:  # the queue check and the submit must be atomic, or concurrent requests all pass the cap
+            if MAX_QUEUE:
+                q = (await client.get("/queue")).json()
+                if len(q["queue_running"]) + len(q["queue_pending"]) >= MAX_QUEUE:
+                    raise HTTPException(429, "The GPU is busy, try again in a minute")
+            up = await client.post("/upload/image", files={"image": (name, data, file.content_type or "video/mp4")}, data={"overwrite": "true"})
+            up.raise_for_status()
+            r = await client.post("/prompt", json={"prompt": build_prompt(PRESETS[preset], up.json()["name"], seed, fit_size(width, height)), "client_id": client_id})
+            if r.status_code != 200:
+                raise HTTPException(502, f"ComfyUI rejected the workflow: {r.text[:800]}")
+            prompt_id = r.json()["prompt_id"]
+    except BaseException:
+        if stamp is not None:
+            release_slot(ip, stamp)  # the render did not start: give the slot back
+        raise
     jobs[prompt_id] = {"client_id": client_id}
     return {"job_id": prompt_id}
 
