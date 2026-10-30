@@ -10,7 +10,11 @@ import hmac
 import json
 import os
 import random
+import subprocess
+import tempfile
+import time
 import uuid
+from collections import defaultdict, deque
 from pathlib import Path
 
 import httpx
@@ -30,6 +34,10 @@ client = httpx.AsyncClient(base_url=COMFYUI_URL, auth=COMFYUI_AUTH, timeout=http
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
 ALLOWED_HOSTS = {h.strip().lower() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",")}
 MAX_QUEUE = int(os.environ.get("MAX_QUEUE", "0"))
+MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "0"))  # 0 = no limit
+MAX_DURATION_S = float(os.environ.get("MAX_DURATION_S", "0"))  # 0 = no limit; needs ffprobe
+RATE_PER_HOUR = int(os.environ.get("RATE_PER_HOUR", "0"))  # per client IP, 0 = no limit
+renders_by_ip: dict[str, deque] = defaultdict(deque)
 jobs: dict[str, dict] = {}
 submit_lock = asyncio.Lock()
 
@@ -79,6 +87,11 @@ def build_prompt(preset: dict, video_name: str, seed: int, size: tuple[int, int]
     wf["conditioning"]["inputs"]["frame_rate"] = float(fps)
     wf["guide"]["inputs"]["strength"] = preset["control_strength"]
     wf["anchor"]["inputs"]["strength"] = preset.get("anchor_strength", 1.0)
+    motion = preset.get("guide_motion", {})
+    x0, x1 = motion.get("region", [0.0, 1.0])
+    if "guide_motion" in wf:
+        wf["guide_motion"]["inputs"].update(dy=motion.get("dy", 0.0), dx=motion.get("dx", 0.0), fade_below=motion.get("fade_below", 0.0),
+                                        region_x0=x0, region_x1=x1)
     wf["ic_lora"]["inputs"]["strength_model"] = preset["control_strength"]
     wf["noise"]["inputs"]["noise_seed"] = seed
     wf["save"]["inputs"].update(frame_rate=float(fps), filename_prefix=f"onetake/{preset['id']}")
@@ -90,12 +103,50 @@ def presets():
     return [{"id": p["id"], "name": p["name"], "prompt": p["prompt"]} for p in PRESETS.values()]
 
 
+def client_ip(request: Request) -> str:
+    """Behind the tunnel the peer is loopback and the real address is in CF-Connecting-IP; otherwise use the peer."""
+    peer = request.client.host if request.client else "unknown"
+    return request.headers.get("cf-connecting-ip", peer) if peer in ("127.0.0.1", "::1") else peer
+
+
+def looks_like_video(head: bytes) -> bool:
+    """MP4/MOV carry 'ftyp' at byte 4; WebM/Matroska start with the EBML magic."""
+    return head[4:8] == b"ftyp" or head[:4] == b"\x1a\x45\xdf\xa3"
+
+
+def duration_seconds(data: bytes) -> float:
+    with tempfile.NamedTemporaryFile(suffix=".bin") as f:
+        f.write(data); f.flush()
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f.name], capture_output=True, text=True, timeout=20)
+    return float(out.stdout.strip())
+
+
 @app.post("/api/jobs")
-async def create_job(file: UploadFile = File(...), preset: str = Form(...), seed: int | None = Form(None), width: int = Form(768, gt=0, le=8192), height: int = Form(448, gt=0, le=8192)):
+async def create_job(request: Request, file: UploadFile = File(...), preset: str = Form(...), seed: int | None = Form(None, ge=0, le=2**32 - 1), width: int = Form(768, gt=0, le=8192), height: int = Form(448, gt=0, le=8192)):
     if preset not in PRESETS:
         raise HTTPException(404, "unknown preset")
-    data = await file.read()
-    name = f"onetake_{uuid.uuid4().hex[:8]}_{Path(file.filename or 'clip.mp4').name}"
+    limit = MAX_UPLOAD_MB * 1024 * 1024
+    data = await file.read(limit + 1) if limit else await file.read()
+    if limit and len(data) > limit:
+        raise HTTPException(413, f"Clip is larger than {MAX_UPLOAD_MB} MB")
+    if not looks_like_video(data[:16]):
+        raise HTTPException(415, "Upload an MP4, MOV or WebM video")
+    if MAX_DURATION_S:
+        try:
+            length = duration_seconds(data)
+        except Exception:
+            raise HTTPException(422, "Could not read the clip")
+        if length > MAX_DURATION_S:
+            raise HTTPException(422, f"Clip is {length:.1f} s long; the limit is {MAX_DURATION_S:g} s")
+    if RATE_PER_HOUR:
+        ip, now = client_ip(request), time.time()
+        window = renders_by_ip[ip]
+        while window and now - window[0] > 3600:
+            window.popleft()
+        if len(window) >= RATE_PER_HOUR:
+            raise HTTPException(429, f"Limit of {RATE_PER_HOUR} renders per hour reached")
+        window.append(now)
+    name = f"onetake_{uuid.uuid4().hex}.mp4"
     client_id = uuid.uuid4().hex
     seed = random.randint(0, 2**32 - 1) if seed is None else seed
     async with submit_lock:  # the queue check and the submit must be atomic, or concurrent requests all pass the cap

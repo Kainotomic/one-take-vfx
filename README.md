@@ -72,9 +72,9 @@ Open <http://127.0.0.1:7860>, drop in a clip, choose a preset, press **Render ef
 
 No clips handy? `scripts/fetch_sample_clips.sh` downloads three free ones.
 
-**Any ComfyUI server works.** Point `COMFYUI_URL` at it (a local install, a rented GPU box, a cloud ComfyUI). It needs the files in the table above and the `ComfyUI-VideoHelperSuite` custom node. If it sits behind basic auth, also set `COMFYUI_USER` and `COMFYUI_PASSWORD`. For a remote box that listens only on localhost, tunnel it: `ssh -L 8188:127.0.0.1:8188 your-gpu-box`.
+**Any ComfyUI server works.** Point `COMFYUI_URL` at it (a local install, a rented GPU box, a cloud ComfyUI). It needs the files in the table above, the `ComfyUI-VideoHelperSuite` custom node, and this repo's `custom_nodes/onetake_vfx` (symlink it into `ComfyUI/custom_nodes/`). If it sits behind basic auth, also set `COMFYUI_USER` and `COMFYUI_PASSWORD`. For a remote box that listens only on localhost, tunnel it: `ssh -L 8188:127.0.0.1:8188 your-gpu-box`.
 
-The app listens on `127.0.0.1` by default, only answers to `localhost`/`127.0.0.1` host names (override with `ALLOWED_HOSTS=name1,name2`, which blocks DNS rebinding) and rejects cross-origin POSTs. To share it, set `APP_PASSWORD` (HTTP basic auth, any username) and optionally `MAX_QUEUE=1` (reject new jobs while the GPU is busy); put it behind HTTPS before exposing it to the internet.
+The app listens on `127.0.0.1` by default, only answers to `localhost`/`127.0.0.1` host names (override with `ALLOWED_HOSTS=name1,name2`, which blocks DNS rebinding) and rejects cross-origin POSTs. To share it, either set `APP_PASSWORD` (HTTP basic auth, any username), or open it with `ALLOWED_HOSTS=<your hostname>` plus abuse limits: `MAX_QUEUE=1` (reject jobs while the GPU is busy), `MAX_UPLOAD_MB=60`, `MAX_DURATION_S=8` (needs `ffprobe`) and `RATE_PER_HOUR=6` (per client IP; behind Cloudflare the `CF-Connecting-IP` header is used). Uploads are accepted only as MP4, MOV or WebM (checked by content), and effects only from `presets/`. Put it behind HTTPS before exposing it to the internet.
 
 Batch rendering from the command line:
 
@@ -95,6 +95,7 @@ Presets are plain JSON files in [`presets/`](presets). Included: `disintegrate`,
   "negative_prompt": "blurry, low quality, ...",
   "control_strength": 0.6,
   "anchor_strength": 1.0,
+  "guide_motion": {"dy": 0, "dx": 0, "fade_below": 0, "region": [0, 1]},
   "num_frames": 97,
   "fps": 24,
   "lora": null
@@ -106,6 +107,7 @@ Presets are plain JSON files in [`presets/`](presets). Included: `disintegrate`,
 | `prompt` / `negative_prompt` | Describe the effect and say the person and camera stay as in the footage. |
 | `control_strength` | 0 to 1. How firmly the input motion constrains the render. Lower lets the effect reshape the body; higher keeps it closer to the original. |
 | `anchor_strength` | 0 to 1, default 1. How strongly the clip's first frame is locked into the render. 1 keeps the scene as filmed; near 0 lets the effect restyle the whole scene (the abstract presets use 0 to 0.35). |
+| `guide_motion` | Optional. Moves the control guide over the clip so the render is pulled along: `dy`/`dx` are fractions of frame height/width reached at the last frame (negative `dy` is up, eased in), `region` limits the move to a horizontal band so background edges stay put, `fade_below` blacks out the bottom fraction of the guide. Used by `levitate`. |
 | `num_frames` | Must be a multiple of 8, plus 1 (97 = 4 s at 24 fps). |
 | `fps` | Output frame rate. |
 | `lora` | Reserved for an optional extra open LoRA (name and link in the preset). None of the shipped presets uses one. |
@@ -121,7 +123,7 @@ In [`workflows/`](workflows), each in ComfyUI **API** format (`*_api.json`) and 
 | `one_take_vfx_*` | The parameterised graph the app patches (prompt, size, frames, seed, strength). |
 | `one_take_vfx_preset_node_*` | Same graph, driven by the **OneTakeVFX Preset** node: choose an effect from a dropdown inside ComfyUI, no app needed. |
 
-`custom_nodes/onetake_vfx` is a small custom node pack (one node: **OneTakeVFX Preset**) that loads a preset from `presets/` and outputs prompt, negative prompt, control strength, frame count and fps. `scripts/install_comfyui.sh` symlinks it into ComfyUI. `scripts/build_workflow.py` regenerates the API workflows, and `scripts/api_to_ui.py` converts them to UI format through the real ComfyUI frontend.
+`custom_nodes/onetake_vfx` is a small custom node pack with two nodes: **OneTakeVFX Preset** loads a preset from `presets/` and outputs its prompt, negative prompt, control and anchor strengths, frame count, fps and guide motion; **OneTakeVFX Guide Motion** moves the control guide over time. `scripts/install_comfyui.sh` symlinks it into ComfyUI. `scripts/build_workflow.py` regenerates the API workflows, and `scripts/api_to_ui.py` converts them to UI format through the real ComfyUI frontend.
 
 ## Known limits
 
