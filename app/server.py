@@ -179,6 +179,7 @@ async def create_job(request: Request, file: UploadFile = File(...), preset: str
     stamp = reserve_slot(ip) if RATE_PER_HOUR else None
     if RATE_PER_HOUR and stamp is None:
         raise HTTPException(429, f"Limit of {RATE_PER_HOUR} renders per hour reached")
+    submitted = False
     try:
         if MAX_DURATION_S:
             try:
@@ -197,13 +198,14 @@ async def create_job(request: Request, file: UploadFile = File(...), preset: str
                     raise HTTPException(429, "The GPU is busy, try again in a minute")
             up = await client.post("/upload/image", files={"image": (name, data, file.content_type or "video/mp4")}, data={"overwrite": "true"})
             up.raise_for_status()
+            submitted = True  # from here the job may be queued, so the slot stays charged whatever happens next
             r = await client.post("/prompt", json={"prompt": build_prompt(PRESETS[preset], up.json()["name"], seed, fit_size(width, height)), "client_id": client_id})
             if r.status_code != 200:
                 raise HTTPException(502, f"ComfyUI rejected the workflow: {r.text[:800]}")
             prompt_id = r.json()["prompt_id"]
-    except BaseException:
-        if stamp is not None:
-            release_slot(ip, stamp)  # the render did not start: give the slot back
+    except BaseException as exc:
+        if stamp is not None and not submitted and not isinstance(exc, asyncio.CancelledError):
+            release_slot(ip, stamp)  # failed before reaching ComfyUI: give the slot back
         raise
     jobs[prompt_id] = {"client_id": client_id}
     return {"job_id": prompt_id}
