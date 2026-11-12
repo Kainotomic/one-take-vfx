@@ -1,0 +1,33 @@
+# Kainotomic standard checks: the organisation ruleset requires `key-check` (jira.yml) and `gate` (this file).
+# `gate` must report on every pull request, so this workflow has no path or branch filter.
+# This repo has no build or tests yet. Add each CI job to this workflow and to gate's needs list;
+# gate is green only when every job it needs passed or was skipped.
+name: ci
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # Required by the organisation ruleset. Keep every other job of this workflow in needs.
+    # always(): a gate skipped by a cancelled run would count as passed.
+    if: always()
+    runs-on: [ubuntu-slim]
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every needed job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "needed job results: ${RESULTS:-none}"
+          if [ "$FAILED" = true ]; then echo "::error::gate: a needed job failed or was cancelled"; exit 1; fi
+          echo "gate: green"
