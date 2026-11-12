@@ -4,7 +4,7 @@ Upload a short phone clip, pick an effect, get the clip back with the effect add
 
 ![before and after](docs/preview.gif)
 
-*Left: the input clip. Right: the render. Eight presets, three clips: [`demo/outputs/`](demo/outputs). Stock input clips are from Mixkit ([license](https://mixkit.co/license/#videoFree)), see [`assets/clips/SOURCES.md`](assets/clips/SOURCES.md).*
+*Left: the input clip. Right: the render. Twelve presets, three clips (`levitate` only on the clip it lifts): [`demo/outputs/`](demo/outputs). Stock input clips are from Mixkit ([license](https://mixkit.co/license/#videoFree)), see [`assets/clips/SOURCES.md`](assets/clips/SOURCES.md).*
 
 ## How it works
 
@@ -74,7 +74,7 @@ No clips handy? `scripts/fetch_sample_clips.sh` downloads three free ones.
 
 **Any ComfyUI server works.** Point `COMFYUI_URL` at it (a local install, a rented GPU box, a cloud ComfyUI). It needs the files in the table above, the `ComfyUI-VideoHelperSuite` custom node, and this repo's `custom_nodes/onetake_vfx` (symlink it into `ComfyUI/custom_nodes/`). If it sits behind basic auth, also set `COMFYUI_USER` and `COMFYUI_PASSWORD`. For a remote box that listens only on localhost, tunnel it: `ssh -L 8188:127.0.0.1:8188 your-gpu-box`.
 
-The app listens on `127.0.0.1` by default, only answers to `localhost`/`127.0.0.1` host names (override with `ALLOWED_HOSTS=name1,name2`, which blocks DNS rebinding) and rejects cross-origin POSTs. To share it, either set `APP_PASSWORD` (HTTP basic auth, any username), or open it with `ALLOWED_HOSTS=<your hostname>` plus abuse limits: `MAX_QUEUE=1` (reject jobs while the GPU is busy), `MAX_UPLOAD_MB=60`, `MAX_DURATION_S=8` (needs `ffprobe`) and `RATE_PER_HOUR=6` (per client IP; behind Cloudflare the `CF-Connecting-IP` header is used). Uploads are accepted only as MP4, MOV or WebM (checked by content), and effects only from `presets/`. Put it behind HTTPS before exposing it to the internet.
+The app listens on `127.0.0.1:7860` by default (`HOST`, `PORT`), only answers to `localhost`/`127.0.0.1` host names (override with `ALLOWED_HOSTS=name1,name2`, which blocks DNS rebinding) and rejects cross-origin POSTs. To share it, either set `APP_PASSWORD` (HTTP basic auth, any username), or open it with `ALLOWED_HOSTS=<your hostname>` plus abuse limits: `MAX_QUEUE=1` (reject jobs while the GPU is busy), `MAX_UPLOAD_MB=60`, `MAX_DURATION_S=8` (needs `ffprobe`) and `RATE_PER_HOUR=6` (per client IP; with `TRUST_CF_HEADER=1`, behind a local Cloudflare tunnel, the `CF-Connecting-IP` header is used). Uploads are accepted only as MP4, MOV or WebM (checked by content), and effects only from `presets/`. Put it behind HTTPS before exposing it to the internet.
 
 Batch rendering from the command line:
 
@@ -141,7 +141,7 @@ In [`workflows/`](workflows), each in ComfyUI **API** format (`*_api.json`) and 
 app/            FastAPI server + single-page UI (talks to ComfyUI over HTTP/WebSocket)
 presets/        effect presets (JSON)
 workflows/      ComfyUI workflows, API + UI format
-custom_nodes/   OneTakeVFX Preset node
+custom_nodes/   OneTakeVFX Preset and Guide Motion nodes
 scripts/        install, model download, render, workflow generation
 demo/outputs/   rendered results (every preset on three clips)
 ```
