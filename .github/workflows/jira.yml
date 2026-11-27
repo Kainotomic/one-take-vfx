@@ -49,7 +49,7 @@ jobs:
           fi
 
           primary=${keys%%|*}
-          msg="No Jira key (${keys//|/, }) in the PR title or branch. Title it like [$primary-123] subject, or add the no-jira label."
+          msg="No Jira key (${keys//|/, }) in the PR title or branch. Title it like fix(ci): preserve the build cache ($primary-123), or add the no-jira label."
           summary "### Jira key missing" "$msg"
           if [ "${MODE:-warn}" = "required" ]; then
             echo "::error::$msg"
